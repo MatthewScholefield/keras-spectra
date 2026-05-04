@@ -1,9 +1,8 @@
-"""JSONL event writer with metadata header for Spectra run logs."""
+"""JSONL event writer with metadata header for Spectria run logs."""
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +11,7 @@ class RunWriter:
     """Writes training events to a JSONL file with a metadata header.
 
     Format:
-        # {"spectra_version":1,"project":"...","run":"...","baseline":"...","config":{...},"created_at":...}
+        # {"spectria_version":1,"project":"...","run":"...","config":{...},...}
         {"epoch":0,"loss":0.69,...}
         {"epoch":1,"loss":0.42,...}
     """
@@ -24,12 +23,14 @@ class RunWriter:
         run: str,
         baseline: str | None = None,
         config: dict[str, Any] | None = None,
+        created_at: int | None = None,
     ) -> None:
         self.logdir = Path(logdir)
         self.project = project
         self.run = run
         self.baseline = baseline
         self.config = config or {}
+        self._created_at = created_at
 
         self._run_dir = self.logdir / project / run
         self._run_dir.mkdir(parents=True, exist_ok=True)
@@ -42,24 +43,48 @@ class RunWriter:
         import time
 
         header = {
-            "spectra_version": 1,
+            "spectria_version": 1,
             "project": self.project,
             "run": self.run,
             "baseline": self.baseline,
             "config": self.config,
-            "created_at": int(time.time()),
+            "created_at": self._created_at or int(time.time()),
         }
         with open(self._events_path, "a") as f:
             f.write(f"# {json.dumps(header)}\n")
         self._written_header = True
 
+    def has_rows(self) -> bool:
+        """Check if any data rows exist in the events file."""
+        if not self._events_path.exists():
+            return False
+        with open(self._events_path) as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    return True
+        return False
+
     def write_row(self, row: dict[str, Any]) -> None:
         self.write_header()
         import time
 
-        row = {**row, "_ts": int(time.time())}
+        row = {**row}
+        row.setdefault("_ts", int(time.time()))
         with open(self._events_path, "a") as f:
             f.write(json.dumps(row, default=str) + "\n")
+
+    def write_rows(self, rows: list[dict[str, Any]]) -> None:
+        """Bulk-write multiple data rows."""
+        self.write_header()
+        import time
+
+        default_ts = int(time.time())
+        with open(self._events_path, "a") as f:
+            for row in rows:
+                row = {**row}
+                row.setdefault("_ts", default_ts)
+                f.write(json.dumps(row, default=str) + "\n")
 
     @property
     def events_path(self) -> Path:
@@ -93,3 +118,25 @@ class RunWriter:
                 except json.JSONDecodeError:
                     continue
         return rows
+
+
+def dump_run(
+    logdir: str | Path,
+    project: str,
+    run: str,
+    rows: list[dict[str, Any]],
+    baseline: str | None = None,
+    config: dict[str, Any] | None = None,
+    *,
+    skip_existing: bool = True,
+    created_at: int | None = None,
+) -> bool:
+    """Write a complete run's data to Spectria JSONL format.
+
+    Returns True if data was written, False if skipped due to existing data.
+    """
+    writer = RunWriter(logdir, project, run, baseline, config, created_at=created_at)
+    if skip_existing and writer.has_rows():
+        return False
+    writer.write_rows(rows)
+    return True

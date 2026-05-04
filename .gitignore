@@ -4,6 +4,6 @@ __pycache__/
 dist/
 build/
 .venv/
-spectra_logs/
+spectria_logs/
 *.egg
 uv.lock

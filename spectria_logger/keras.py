@@ -1,4 +1,4 @@
-"""Keras callback that logs training metrics to Spectra JSONL format."""
+"""Keras adapter that logs training metrics to Spectria JSONL format."""
 
 from __future__ import annotations
 
@@ -8,16 +8,16 @@ from typing import Any
 from .writer import RunWriter
 
 
-class SpectraCallback:
+class SpectriaCallback:
     """Keras callback that writes epoch-level (and optionally batch-level) metrics to JSONL.
 
     Usage::
 
-        from keras_spectra import SpectraCallback
+        from spectria_logger import SpectriaCallback
 
         model.fit(x, y, callbacks=[
-            SpectraCallback(project="mnist", run="baseline",
-                            config={"lr": 0.01, "optimizer": "adam"})
+            SpectriaCallback(project="mnist", run="baseline",
+                             config={"lr": 0.01, "optimizer": "adam"})
         ])
     """
 
@@ -27,7 +27,7 @@ class SpectraCallback:
         run: str | None = None,
         baseline: str | None = None,
         config: dict[str, Any] | None = None,
-        logdir: str | Path = "./spectra_logs",
+        logdir: str | Path = "./spectria_logs",
         include_batch_metrics: bool = False,
     ) -> None:
         self.project = project
@@ -55,8 +55,8 @@ class SpectraCallback:
         except ImportError:
             pass
         raise ImportError(
-            "keras is required to use SpectraCallback. "
-            "Install it with: pip install keras-spectra[keras]"
+            "keras is required to use SpectriaCallback. "
+            "Install it with: pip install spectria-logger[keras]"
         )
 
     def __enter__(self):
@@ -93,7 +93,7 @@ class SpectraCallback:
     def get_keras_callback(self):
         """Return a dict-based callback compatible with keras.Callback interface.
 
-        This allows using SpectraCallback with model.fit() without subclassing.
+        This allows using SpectriaCallback with model.fit() without subclassing.
         """
         return {
             "on_train_begin": self.on_train_begin,
@@ -110,25 +110,25 @@ def _auto_run_name() -> str:
     return datetime.now().strftime("run-%Y%m%d-%H%M%S")
 
 
-def as_keras_callback(callback: SpectraCallback):
-    """Wrap a SpectraCallback as a keras.Callback subclass instance.
+def as_keras_callback(callback: SpectriaCallback):
+    """Wrap a SpectriaCallback as a keras.Callback subclass instance.
 
     This is needed for keras >= 3 which requires actual Callback subclass objects.
 
     Usage::
 
-        from keras_spectra import SpectraCallback, as_keras_callback
+        from spectria_logger import SpectriaCallback, as_keras_callback
 
         model.fit(x, y, callbacks=[
-            as_keras_callback(SpectraCallback(project="mnist", run="baseline"))
+            as_keras_callback(SpectriaCallback(project="mnist", run="baseline"))
         ])
     """
     import keras
 
-    class _SpectraKerasCallback(keras.Callback):
-        def __init__(self, spectra_cb: SpectraCallback):
+    class _SpectriaKerasCallback(keras.Callback):
+        def __init__(self, spectria_cb: SpectriaCallback):
             super().__init__()
-            self._cb = spectra_cb
+            self._cb = spectria_cb
 
         def on_epoch_end(self, epoch, logs=None):
             self._cb.on_epoch_end(epoch, logs)
@@ -136,4 +136,4 @@ def as_keras_callback(callback: SpectraCallback):
         def on_batch_end(self, batch, logs=None):
             self._cb.on_batch_end(batch, logs)
 
-    return _SpectraKerasCallback(callback)
+    return _SpectriaKerasCallback(callback)

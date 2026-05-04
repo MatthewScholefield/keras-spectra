@@ -1,4 +1,4 @@
-"""CLI entry point for keras-spectra serve."""
+"""CLI entry point for spectria serve."""
 
 from __future__ import annotations
 
@@ -7,16 +7,16 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="keras-spectra",
-        description="Serve Spectra training logs over HTTP/SSE",
+        prog="spectria",
+        description="Serve Spectria training logs over HTTP/SSE",
     )
     sub = parser.add_subparsers(dest="command")
 
-    serve_parser = sub.add_parser("serve", help="Start the Spectra log server")
+    serve_parser = sub.add_parser("serve", help="Start the Spectria log server")
     serve_parser.add_argument(
         "--logdir",
-        default="./spectra_logs",
-        help="Directory containing training logs (default: ./spectra_logs)",
+        default="./spectria_logs",
+        help="Directory containing training logs (default: ./spectria_logs)",
     )
     serve_parser.add_argument(
         "--host",
@@ -44,7 +44,7 @@ def _serve(args):
     from .server import create_app
 
     app = create_app(logdir=args.logdir)
-    print(f"Spectra server serving logs from {args.logdir}")
+    print(f"Spectria server serving logs from {args.logdir}")
     print(f"Connect at http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port)
 
