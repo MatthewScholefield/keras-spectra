@@ -6,3 +6,4 @@ build/
 .venv/
 spectra_logs/
 *.egg
+uv.lock

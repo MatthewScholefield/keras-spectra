@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -12,9 +13,21 @@ from typing import Any
 from .writer import RunWriter
 
 
+def _allowed_origins() -> list[str]:
+    """Exact-match allowed origins."""
+    return [
+        "https://matthewscholefield.github.io/spectra",
+    ]
+
+
+_LOCALHOST_ORIGIN_REGEX = r"http://localhost:\d+"
+
+
 def create_app(logdir: str | Path):
     """Create a Starlette app serving Spectra training logs."""
     from starlette.applications import Starlette
+    from starlette.middleware import Middleware
+    from starlette.middleware.cors import CORSMiddleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, StreamingResponse
     from starlette.routing import Route
@@ -123,6 +136,14 @@ def create_app(logdir: str | Path):
             Route("/api/projects/{name}/runs", endpoint=list_runs),
             Route("/api/projects/{name}/runs/{run}/data", endpoint=get_run_data),
             Route("/api/projects/{name}/runs/{run}/events", endpoint=stream_events),
+        ],
+        middleware=[
+            Middleware(
+                CORSMiddleware,
+                allow_origins=_allowed_origins(),
+                allow_origin_regex=_LOCALHOST_ORIGIN_REGEX,
+                allow_methods=["GET"],
+            ),
         ],
     )
     return app
