@@ -7,3 +7,4 @@ build/
 spectria_logs/
 *.egg
 uv.lock
+src/spectria/static/

@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+from pathlib import Path
 
 
 def main():
@@ -29,13 +36,107 @@ def main():
         default=8420,
         help="Port to listen on (default: 8420)",
     )
+    serve_parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Launch Vite dev server alongside the API server",
+    )
+    serve_parser.add_argument(
+        "--frontend-dir",
+        default=None,
+        help="Path to the frontend directory (default: auto-detect ../spectria)",
+    )
 
     args = parser.parse_args()
 
     if args.command == "serve":
-        _serve(args)
+        if args.dev:
+            _serve_dev(args)
+        else:
+            _serve(args)
     else:
         parser.print_help()
+
+
+def _find_frontend_dir(explicit: str | None) -> Path:
+    if explicit:
+        p = Path(explicit).resolve()
+        if not p.is_dir():
+            print(f"Error: frontend directory not found: {p}", file=sys.stderr)
+            sys.exit(1)
+        return p
+
+    # Auto-detect: look for ../spectria relative to the package
+    package_dir = Path(__file__).resolve().parent
+    candidate = package_dir.parent.parent.parent / "spectria"
+    if candidate.is_dir() and (candidate / "package.json").exists():
+        return candidate
+
+    print(
+        "Error: could not auto-detect frontend directory. "
+        "Use --frontend-dir to specify it.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def _serve_dev(args):
+    import uvicorn
+
+    from .server import create_app
+
+    frontend_dir = _find_frontend_dir(args.frontend_dir)
+
+    if not shutil.which("npm"):
+        print("Error: npm not found. Install Node.js to use --dev.", file=sys.stderr)
+        sys.exit(1)
+
+    if not (frontend_dir / "package.json").exists():
+        print(f"Error: no package.json in {frontend_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    app = create_app(logdir=args.logdir)
+    api_url = f"http://{args.host}:{args.port}"
+
+    # Start API server in a background thread
+    api_thread = threading.Thread(
+        target=uvicorn.run,
+        args=(app,),
+        kwargs={"host": args.host, "port": args.port, "log_level": "info"},
+        daemon=True,
+    )
+    api_thread.start()
+
+    print(f"Spectria API server at {api_url}")
+
+    # Launch Vite dev server
+    vite_env = {
+        **os.environ,
+        "VITE_LOCAL_DATA_URL": api_url,
+    }
+    vite_cmd = ["npm", "run", "dev"]
+    if args.host not in ("127.0.0.1", "localhost"):
+        vite_cmd += ["--", "--host", args.host]
+    vite_proc = subprocess.Popen(
+        vite_cmd,
+        cwd=str(frontend_dir),
+        env=vite_env,
+    )
+
+    print(f"Vite dev server started (PID {vite_proc.pid})")
+
+    def _shutdown(signum, frame):
+        vite_proc.terminate()
+        try:
+            vite_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            vite_proc.kill()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    vite_proc.wait()
 
 
 def _serve(args):

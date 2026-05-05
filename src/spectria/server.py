@@ -26,7 +26,7 @@ def create_app(logdir: str | Path):
     from starlette.middleware import Middleware
     from starlette.middleware.cors import CORSMiddleware
     from starlette.requests import Request
-    from starlette.responses import JSONResponse, StreamingResponse
+    from starlette.responses import FileResponse, JSONResponse, StreamingResponse
     from starlette.routing import Route
 
     logdir = Path(logdir)
@@ -61,7 +61,11 @@ def create_app(logdir: str | Path):
                 if time.time() - mtime < 120:  # active within last 2 minutes
                     status = "running"
                 else:
-                    finished_at = int(mtime)
+                    # Prefer header timestamps over file mtime for dump-spectria data
+                    if header:
+                        finished_at = header.get("finished_at") or header.get("created_at")
+                    if not finished_at:
+                        finished_at = int(mtime)
 
             runs.append({
                 "run_id": run_dir.name,
@@ -80,7 +84,12 @@ def create_app(logdir: str | Path):
         run_id = request.path_params["run"]
         events_path = logdir / project_name / run_id / "events.jsonl"
         rows = RunWriter.read_rows(events_path)
-        return JSONResponse(rows)
+        status = "completed"
+        if events_path.exists():
+            mtime = events_path.stat().st_mtime
+            if time.time() - mtime < 120:
+                status = "running"
+        return JSONResponse({"rows": rows, "status": status})
 
     async def stream_events(request: Request) -> StreamingResponse:
         project_name = request.path_params["name"]
@@ -134,13 +143,30 @@ def create_app(logdir: str | Path):
             },
         )
 
+    routes = [
+        Route("/api/projects", endpoint=list_projects),
+        Route("/api/projects/{name}/runs", endpoint=list_runs),
+        Route("/api/projects/{name}/runs/{run}/data", endpoint=get_run_data),
+        Route("/api/projects/{name}/runs/{run}/events", endpoint=stream_events),
+    ]
+
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        def get_mode(request: Request) -> JSONResponse:
+            return JSONResponse({"local_data_mode": True})
+
+        async def serve_spa(request: Request) -> FileResponse:
+            path = request.path_params.get("path", "")
+            file_path = (static_dir / path).resolve()
+            if path and file_path.is_file() and str(file_path).startswith(str(static_dir.resolve())):
+                return FileResponse(str(file_path))
+            return FileResponse(str(static_dir / "index.html"))
+
+        routes.append(Route("/api/mode", endpoint=get_mode))
+        routes.append(Route("/{path:path}", endpoint=serve_spa))
+
     app = Starlette(
-        routes=[
-            Route("/api/projects", endpoint=list_projects),
-            Route("/api/projects/{name}/runs", endpoint=list_runs),
-            Route("/api/projects/{name}/runs/{run}/data", endpoint=get_run_data),
-            Route("/api/projects/{name}/runs/{run}/events", endpoint=stream_events),
-        ],
+        routes=routes,
         middleware=[
             Middleware(
                 CORSMiddleware,

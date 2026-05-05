@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spectria"
-version = "0.2.0"
+version = "0.3.0"
 description = "HTTP/SSE server for live training visualization in Spectria"
 license = "MIT"
 requires-python = ">=3.9"
@@ -19,6 +19,9 @@ spectria = "spectria.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["spectria*"]
+
+[tool.setuptools.package-data]
+spectria = ["static/**"]
 
 [tool.ruff]
 target-version = "py39"

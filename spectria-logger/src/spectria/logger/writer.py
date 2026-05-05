@@ -24,6 +24,7 @@ class RunWriter:
         baseline: str | None = None,
         config: dict[str, Any] | None = None,
         created_at: int | None = None,
+        finished_at: int | None = None,
     ) -> None:
         self.logdir = Path(logdir)
         self.project = project
@@ -31,6 +32,7 @@ class RunWriter:
         self.baseline = baseline
         self.config = config or {}
         self._created_at = created_at
+        self._finished_at = finished_at
 
         self._run_dir = self.logdir / project / run
         self._run_dir.mkdir(parents=True, exist_ok=True)
@@ -50,6 +52,8 @@ class RunWriter:
             "config": self.config,
             "created_at": self._created_at or int(time.time()),
         }
+        if self._finished_at is not None:
+            header["finished_at"] = self._finished_at
         with open(self._events_path, "a") as f:
             f.write(f"# {json.dumps(header)}\n")
         self._written_header = True
@@ -130,12 +134,13 @@ def dump_run(
     *,
     skip_existing: bool = True,
     created_at: int | None = None,
+    finished_at: int | None = None,
 ) -> bool:
     """Write a complete run's data to Spectria JSONL format.
 
     Returns True if data was written, False if skipped due to existing data.
     """
-    writer = RunWriter(logdir, project, run, baseline, config, created_at=created_at)
+    writer = RunWriter(logdir, project, run, baseline, config, created_at=created_at, finished_at=finished_at)
     if skip_existing and writer.has_rows():
         return False
     writer.write_rows(rows)
